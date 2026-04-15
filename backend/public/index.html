@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Digital Jukebox</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-page="index">
+    <div class="wrap">
+      <div class="card">
+        <h1>Digital Jukebox</h1>
+        <p class="muted">Create a room for the boombox or join with a code.</p>
+        <div class="row" style="margin-top: 24px">
+          <div class="col">
+            <h2>Host</h2>
+            <p class="muted">Opens the video player and room QR.</p>
+            <button type="button" class="btn btn-primary" id="btnCreate">Create Room</button>
+            <p class="err" id="createErr"></p>
+          </div>
+          <div class="col">
+            <h2>Join</h2>
+            <label for="joinRoom">Room Code</label>
+            <input type="text" id="joinRoom" autocomplete="off" />
+            <label for="joinName" style="margin-top: 12px">DJ Name</label>
+            <input type="text" id="joinName" autocomplete="off" />
+            <button type="button" class="btn btn-ghost" style="margin-top: 14px" id="btnJoin">Join Room</button>
+            <p class="err" id="joinErr"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

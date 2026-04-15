@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remote</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-page="remote">
+    <div id="gate" class="gate-screen">
+      <div class="gate-card card">
+        <h1>Join Room</h1>
+        <label for="gRoom">Room Code</label>
+        <input type="text" id="gRoom" autocomplete="off" />
+        <label for="gName" style="margin-top: 12px">DJ Name</label>
+        <input type="text" id="gName" autocomplete="off" />
+        <button type="button" class="btn btn-primary" style="margin-top: 14px; width: 100%" id="gJoin">Join</button>
+        <p class="err" id="gErr"></p>
+      </div>
+    </div>
+    <div id="app" class="remote-shell" style="display: none">
+      <div class="remote-main">
+        <div class="remote-now-wrap" id="nowBox">
+          <p class="muted" id="nowEmpty">Nothing playing yet.</p>
+          <div id="nowInner" style="display: none">
+            <div class="remote-now-media">
+              <img id="nowThumb" class="remote-now-thumb" alt="" />
+            </div>
+            <div class="now-title" id="nowTitle"></div>
+            <div class="now-meta">Added by <span class="dj-name" id="nowBy"></span></div>
+            <div class="now-actions">
+              <button type="button" class="btn btn-small btn-ghost btn-now" id="btnUpNow">Upvote 👍</button>
+              <button type="button" class="btn btn-small btn-danger btn-now" id="btnVeto">Skip ⏭</button>
+            </div>
+            <div class="veto-bar" id="vetoBar"></div>
+          </div>
+        </div>
+        <div class="remote-search-block">
+          <h2 class="section-title">Search</h2>
+          <div class="search-field">
+            <span class="search-icon">🔍</span>
+            <input type="search" id="searchQ" placeholder="Search YouTube…" />
+          </div>
+          <ul class="list search-results dropdown-results" id="searchResults"></ul>
+        </div>
+        <div class="remote-queue-block">
+          <h2 class="section-title">Up Next</h2>
+          <ul class="list" id="queueList"></ul>
+        </div>
+      </div>
+      <aside class="remote-sidebar">
+        <div class="sidebar-head">
+          <p class="muted" id="remoteHead"></p>
+        </div>
+        <div class="sidebar-tabs">
+          <button type="button" class="stab active" data-stab="users">Users</button>
+          <button type="button" class="stab" data-stab="lb">Leaderboard</button>
+        </div>
+        <div class="sidebar-body">
+          <div id="stabUsers">
+            <ul class="list user-list" id="userList"></ul>
+          </div>
+          <div id="stabLb" style="display: none">
+            <div class="lb-grid" id="lbRoot"></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

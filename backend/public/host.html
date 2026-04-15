@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Boombox</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-page="host" class="host-page">
+    <div class="host-shell">
+      <div class="host-main">
+        <div class="host-head">
+          <h1>Boombox</h1>
+          <p class="muted" id="hostStatus">Connecting…</p>
+        </div>
+        <div class="yt-frame"><div id="ytplayer"></div></div>
+        <div class="now-playing-host">
+          <div class="now-title" id="hostNowTitle">Waiting for music…</div>
+          <div class="now-meta">Added by <span class="dj-name" id="hostNowBy">—</span></div>
+        </div>
+        <div class="admin-controls" id="adminControls">
+          <h2 class="section-title">Controls</h2>
+          <div class="ctrl-row">
+            <button type="button" class="btn btn-small btn-ghost" id="btnLoop">🔁 Loop Off</button>
+            <button type="button" class="btn btn-small btn-danger" id="btnForceSkip">⏭ Force Skip</button>
+          </div>
+        </div>
+        <div class="host-tabs-wrap">
+          <div class="sidebar-tabs">
+            <button type="button" class="stab active" data-host-tab="queue">Queue + Search</button>
+            <button type="button" class="stab" data-host-tab="room">Room Info</button>
+          </div>
+        </div>
+        <div id="hostPanelQueue" class="host-panel">
+          <div class="host-block">
+            <h2 class="section-title">Add Songs</h2>
+            <div class="search-field">
+              <span class="search-icon">🔍</span>
+              <input type="search" id="hostSearchQ" placeholder="Search YouTube…" />
+            </div>
+            <ul class="list search-results dropdown-results" id="hostSearchResults"></ul>
+          </div>
+          <div class="host-block" style="margin-top: 16px">
+            <h2 class="section-title">Up Next</h2>
+            <ul class="list" id="hostQueueList"></ul>
+          </div>
+        </div>
+        <div id="hostPanelRoom" class="host-panel" style="display: none">
+          <div class="host-room-grid">
+            <div class="host-block qr-box">
+              <span class="badge">Scan to join</span>
+              <div class="qr-host" id="qrHost"></div>
+            </div>
+            <div class="host-block">
+              <h2 class="section-title">Join Code</h2>
+              <div class="code-pill" id="roomCodeDisplay">------</div>
+              <p class="muted" style="margin-top: 8px; word-break: break-all" id="joinUrlText"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <aside class="host-sidebar">
+        <div class="sidebar-tabs">
+          <button type="button" class="stab active" data-side="members">Users</button>
+          <button type="button" class="stab" data-side="lb">Leaderboard</button>
+        </div>
+        <div class="sidebar-body">
+          <div id="hostSideMembers">
+            <ul class="list user-list" id="hostMembers"></ul>
+          </div>
+          <div id="hostSideLb" style="display: none">
+            <div class="lb-grid" id="hostLbRoot"></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <script>
+      window.__djukeYtReady = false;
+      window.onYouTubeIframeAPIReady = function () {
+        window.__djukeYtReady = true;
+        if (typeof window.__djukeMountPlayer === "function") window.__djukeMountPlayer();
+      };
+    </script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
