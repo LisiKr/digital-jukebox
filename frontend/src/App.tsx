@@ -1,26 +1,13 @@
 import { useState, useCallback, useRef } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { WelcomeScreen } from "@/components/jukebox/WelcomeScreen";
 import { JoinFlow } from "@/components/jukebox/JoinFlow";
 import { ProfileSetup } from "@/components/jukebox/ProfileSetup";
 import { RoomView } from "@/components/jukebox/RoomView";
 import { getSocket, disconnectSocket } from "@/lib/socket";
 
-export const Route = createFileRoute("/")({
-  component: Index,
-  head: () => ({
-    meta: [
-      { title: "Digital Jukebox – Your Party, Your Playlist" },
-      { name: "description", content: "Host or join a party music room. Queue songs, vote, and vibe together in real-time." },
-      { property: "og:title", content: "Digital Jukebox" },
-      { property: "og:description", content: "Your party. Your playlist. Your rules." },
-    ],
-  }),
-});
-
 type AppStep = "welcome" | "join" | "profile" | "room";
 
-function Index() {
+export default function App() {
   const [step, setStep] = useState<AppStep>("welcome");
   const [isHost, setIsHost] = useState(false);
   const [djName, setDjName] = useState("");
