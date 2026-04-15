@@ -124,7 +124,7 @@ function serializeQueueItem(item) {
   };
 }
 
-function broadcastState(room) {
+function getStatePayload(room) {
   const members = [];
   if (room.hostSocketId) {
     members.push({ sid: room.hostSocketId, djName: "Host", role: "host" });
@@ -132,7 +132,7 @@ function broadcastState(room) {
   for (const [sid, m] of room.remotes.entries()) {
     members.push({ sid, djName: m.djName, role: "remote" });
   }
-  const payload = {
+  return {
     queue: room.queue.map(serializeQueueItem),
     nowPlaying: room.nowPlaying ? serializeQueueItem(room.nowPlaying) : null,
     vetoCount: room.nowPlaying ? room.vetoBySocket.size : 0,
@@ -148,7 +148,10 @@ function broadcastState(room) {
       return String(a.djName).localeCompare(String(b.djName));
     }),
   };
-  io.to(room.code).emit("queue:updated", payload);
+}
+
+function broadcastState(room) {
+  io.to(room.code).emit("queue:updated", getStatePayload(room));
 }
 
 function clearVetoes(room) {
@@ -215,7 +218,7 @@ io.on("connection", (socket) => {
     socket.data.roomCode = room.code;
     socket.data.role = "host";
     broadcastState(room);
-    if (typeof cb === "function") cb({ ok: true });
+    if (typeof cb === "function") cb({ ok: true, state: getStatePayload(room) });
   });
 
   socket.on("room:join", (payload, cb) => {
@@ -247,7 +250,7 @@ io.on("connection", (socket) => {
     ensureStat(room, norm, display);
     broadcastState(room);
     if (typeof cb === "function")
-      cb({ ok: true, roomCode: room.code, djName: display });
+      cb({ ok: true, roomCode: room.code, djName: display, state: getStatePayload(room) });
   });
 
   socket.on("queue:add", (payload, cb) => {
@@ -412,6 +415,12 @@ io.on("connection", (socket) => {
     }
     advanceQueue(room, false);
     if (typeof cb === "function") cb({ ok: true });
+  });
+
+  socket.on("room:requestSync", () => {
+    const room = getRoom(socket.data.roomCode);
+    if (!room) return;
+    socket.emit("queue:updated", getStatePayload(room));
   });
 
   socket.on("disconnect", () => {

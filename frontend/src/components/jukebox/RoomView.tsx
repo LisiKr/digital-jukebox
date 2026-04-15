@@ -32,30 +32,32 @@ import type {
   SearchResult,
 } from "./mockData";
 
-const BACKEND_URL = "http://localhost:3000";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
 interface RoomViewProps {
   isHost: boolean;
   djName: string;
   roomCode: string;
   onLeave: () => void;
+  initialState?: RoomState | null;
 }
 
-export function RoomView({ isHost, djName, roomCode, onLeave }: RoomViewProps) {
+export function RoomView({ isHost, djName, roomCode, onLeave, initialState }: RoomViewProps) {
   const [tab, setTab] = useState<"queue" | "leaderboard" | "room">("queue");
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [upvoted, setUpvoted] = useState<Set<string>>(new Set());
-  const [roomState, setRoomState] = useState<RoomState>({
+  const defaultState: RoomState = {
     queue: [],
     nowPlaying: null,
     vetoCount: 0,
     vetoNeeded: 0,
     members: [],
     leaderboard: [],
-  });
+  };
+  const [roomState, setRoomState] = useState<RoomState>(initialState || defaultState);
   const [replayTrigger, setReplayTrigger] = useState(0);
 
   const socket = getSocket();
@@ -71,6 +73,8 @@ export function RoomView({ isHost, djName, roomCode, onLeave }: RoomViewProps) {
 
     socket.on("queue:updated", handleUpdate);
     socket.on("song:replay", handleReplay);
+
+    socket.emit("room:requestSync");
 
     return () => {
       socket.off("queue:updated", handleUpdate);
@@ -400,8 +404,8 @@ function QueueTab({
         </p>
         {nowPlaying ? (
           <>
-            <div className="flex gap-3">
-              <div className="relative w-28 h-20 rounded-lg overflow-hidden bg-muted shrink-0">
+            <div className="flex gap-3 md:flex-col md:gap-4">
+              <div className="relative w-28 h-20 md:w-full md:h-auto md:aspect-video rounded-lg overflow-hidden bg-muted shrink-0">
                 {isHost ? (
                   <YouTubeEmbed
                     videoId={nowPlaying.videoId}
@@ -417,49 +421,49 @@ function QueueTab({
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-sm text-foreground truncate">
+                <h3 className="font-bold text-sm md:text-lg text-foreground truncate">
                   {nowPlaying.title}
                 </h3>
-                <p className="text-xs text-primary mt-0.5">
+                <p className="text-xs md:text-sm text-primary mt-0.5">
                   Added by {nowPlaying.addedBy}
                 </p>
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <div className="flex items-center gap-2 md:gap-3 mt-2 md:mt-3 flex-wrap">
                   <button
                     onClick={() => handleUpvote(nowPlaying.id)}
-                    className={`flex items-center gap-1 text-xs rounded-full px-2.5 py-1 active:scale-95 transition-transform ${
+                    className={`flex items-center gap-1 md:gap-1.5 text-xs md:text-sm rounded-full px-2.5 py-1 md:px-4 md:py-2 active:scale-95 transition-transform ${
                       upvoted.has(nowPlaying.id)
                         ? "bg-primary/20 text-primary"
                         : "bg-surface-elevated text-foreground"
                     }`}
                   >
-                    <ThumbsUp className="h-3.5 w-3.5" />
+                    <ThumbsUp className="h-3.5 w-3.5 md:h-5 md:w-5" />
                     {nowPlaying.upvoteCount}
                   </button>
                   <button
                     onClick={handleVeto}
-                    className="flex items-center gap-1 text-xs bg-destructive/15 text-destructive rounded-full px-2.5 py-1 active:scale-95 transition-transform"
+                    className="flex items-center gap-1 md:gap-1.5 text-xs md:text-sm bg-destructive/15 text-destructive rounded-full px-2.5 py-1 md:px-4 md:py-2 active:scale-95 transition-transform"
                   >
-                    <ThumbsDown className="h-3.5 w-3.5" />
+                    <ThumbsDown className="h-3.5 w-3.5 md:h-5 md:w-5" />
                     Veto
                   </button>
                   {isHost && (
                     <>
                       <button
                         onClick={handleSkip}
-                        className="flex items-center gap-1 text-xs bg-accent/15 text-accent rounded-full px-2.5 py-1 active:scale-95 transition-transform"
+                        className="flex items-center gap-1 md:gap-1.5 text-xs md:text-sm bg-accent/15 text-accent rounded-full px-2.5 py-1 md:px-4 md:py-2 active:scale-95 transition-transform"
                       >
-                        <SkipForward className="h-3.5 w-3.5" />
+                        <SkipForward className="h-3.5 w-3.5 md:h-5 md:w-5" />
                         Skip
                       </button>
                       <button
                         onClick={handleLoop}
-                        className={`flex items-center gap-1 text-xs rounded-full px-2.5 py-1 active:scale-95 transition-transform ${
+                        className={`flex items-center gap-1 md:gap-1.5 text-xs md:text-sm rounded-full px-2.5 py-1 md:px-4 md:py-2 active:scale-95 transition-transform ${
                           nowPlaying.loop
                             ? "bg-primary/20 text-primary"
                             : "bg-surface-elevated text-muted-foreground"
                         }`}
                       >
-                        <Repeat className="h-3.5 w-3.5" />
+                        <Repeat className="h-3.5 w-3.5 md:h-5 md:w-5" />
                       </button>
                     </>
                   )}

@@ -4,6 +4,7 @@ import { JoinFlow } from "@/components/jukebox/JoinFlow";
 import { ProfileSetup } from "@/components/jukebox/ProfileSetup";
 import { RoomView } from "@/components/jukebox/RoomView";
 import { getSocket, disconnectSocket } from "@/lib/socket";
+import type { RoomState } from "@/components/jukebox/mockData";
 
 type AppStep = "welcome" | "join" | "profile" | "room";
 
@@ -14,6 +15,7 @@ export default function App() {
   const [roomCode, setRoomCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [initialRoomState, setInitialRoomState] = useState<RoomState | null>(null);
   const hostTokenRef = useRef("");
 
   const handleHost = () => {
@@ -51,9 +53,10 @@ export default function App() {
             socket.emit(
               "room:hostJoin",
               { roomCode: res.roomCode, hostToken: res.hostToken },
-              (joinRes: { ok: boolean; error?: string }) => {
+              (joinRes: { ok: boolean; error?: string; state?: RoomState }) => {
                 setLoading(false);
                 if (joinRes.ok) {
+                  if (joinRes.state) setInitialRoomState(joinRes.state);
                   setStep("room");
                 } else {
                   setError(joinRes.error || "Failed to create room");
@@ -66,9 +69,10 @@ export default function App() {
         socket.emit(
           "room:join",
           { roomCode, djName: name },
-          (res: { ok: boolean; error?: string }) => {
+          (res: { ok: boolean; error?: string; state?: RoomState }) => {
             setLoading(false);
             if (res.ok) {
+              if (res.state) setInitialRoomState(res.state);
               setStep("room");
             } else {
               setError(res.error || "Failed to join room");
@@ -87,6 +91,7 @@ export default function App() {
     setDjName("");
     setRoomCode("");
     setError("");
+    setInitialRoomState(null);
     hostTokenRef.current = "";
   }, []);
 
@@ -119,6 +124,7 @@ export default function App() {
           djName={djName}
           roomCode={roomCode}
           onLeave={handleLeave}
+          initialState={initialRoomState}
         />
       );
   }
