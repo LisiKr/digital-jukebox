@@ -395,6 +395,12 @@ function QueueTab({
 }) {
   const { nowPlaying, queue, vetoCount, vetoNeeded } = roomState;
   const vetoProgress = vetoNeeded > 0 ? vetoCount / vetoNeeded : 0;
+  const handleSearchResultSelect = useCallback(
+    (result: SearchResult) => {
+      handleAddSong(result);
+    },
+    [handleAddSong],
+  );
 
   return (
     <div className="flex flex-col">
@@ -527,12 +533,20 @@ function QueueTab({
                   alt={result.title}
                   className="w-12 h-9 rounded-md object-cover shrink-0"
                 />
-                <p className="flex-1 text-sm font-medium text-foreground truncate min-w-0">
-                  {result.title}
-                </p>
                 <button
-                  onClick={() => handleAddSong(result)}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg bg-primary/15 text-primary hover:bg-primary/25 active:scale-95 transition-all shrink-0"
+                  type="button"
+                  onClick={() => handleSearchResultSelect(result)}
+                  className="flex-1 text-left touch-manipulation"
+                >
+                  <p className="text-sm font-medium text-foreground truncate min-w-0">
+                    {result.title}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSearchResultSelect(result)}
+                  className="h-10 w-10 flex items-center justify-center rounded-lg bg-primary/15 text-primary hover:bg-primary/25 active:scale-95 transition-all shrink-0 touch-manipulation"
+                  aria-label={`Add ${result.title}`}
                 >
                   <Plus className="h-4 w-4" />
                 </button>
