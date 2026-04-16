@@ -94,19 +94,29 @@ function ensureStat(room, norm, display) {
   }
 }
 
+function getRemoteBySocketId(room, socketId) {
+  for (const remote of room.remotes.values()) {
+    if (remote.socketId === socketId) return remote;
+  }
+  return null;
+}
+
 function getMemberForQueue(room, socket) {
   if (socket.data.role === "host") {
     return { norm: "host", djName: "Host" };
   }
   if (socket.data.role === "remote") {
-    const m = room.remotes.get(socket.id);
+    const m = getRemoteBySocketId(room, socket.id);
     if (m) return { norm: m.norm, djName: m.djName };
   }
   return null;
 }
 
 function vetoThreshold(room) {
-  const n = room.remotes.size;
+  let n = 0;
+  for (const remote of room.remotes.values()) {
+    if (remote.socketId) n++;
+  }
   if (n <= 0) return Infinity;
   return Math.ceil(n / 2);
 }
@@ -129,15 +139,20 @@ function getStatePayload(room) {
   if (room.hostSocketId) {
     members.push({ sid: room.hostSocketId, djName: "Host", role: "host" });
   }
-  for (const [sid, m] of room.remotes.entries()) {
-    members.push({ sid, djName: m.djName, role: "remote" });
+  for (const m of room.remotes.values()) {
+    if (m.socketId) {
+      members.push({ sid: m.socketId, djName: m.djName, role: "remote" });
+    }
   }
   return {
     queue: room.queue.map(serializeQueueItem),
+    pendingQueue: room.pendingQueue.map(serializeQueueItem),
+    playedQueue: room.playedQueue.map(serializeQueueItem),
     nowPlaying: room.nowPlaying ? serializeQueueItem(room.nowPlaying) : null,
     vetoCount: room.nowPlaying ? room.vetoBySocket.size : 0,
     vetoNeeded: room.nowPlaying ? vetoThreshold(room) : 0,
     members,
+    settings: room.settings,
     leaderboard: Object.values(room.stats).sort((a, b) => {
       const t =
         b.upvotesReceived +
@@ -161,6 +176,7 @@ function clearVetoes(room) {
 function advanceQueue(room, wasVeto) {
   if (room.nowPlaying) {
     const cur = room.nowPlaying;
+    room.playedQueue.push(cur);
     if (wasVeto) {
       ensureStat(room, cur.addedByNorm, cur.addedBy);
       room.stats[cur.addedByNorm].songsVetoed += 1;
@@ -181,6 +197,20 @@ function advanceQueue(room, wasVeto) {
   }
 }
 
+function playPrevious(room) {
+  if (!room.playedQueue.length) return false;
+  const previous = room.playedQueue.pop();
+  if (!previous) return false;
+  if (room.nowPlaying) {
+    room.queue.unshift(room.nowPlaying);
+  }
+  room.nowPlaying = previous;
+  room.nowPlaying.upvotedBy = room.nowPlaying.upvotedBy || new Set();
+  clearVetoes(room);
+  broadcastState(room);
+  return true;
+}
+
 function getRoom(code) {
   if (!code) return null;
   return rooms.get(String(code).trim().toUpperCase()) || null;
@@ -194,12 +224,20 @@ io.on("connection", (socket) => {
     const room = {
       code,
       hostToken,
+      hostUserId: null,
       hostSocketId: null,
       remotes: new Map(),
       queue: [],
+      pendingQueue: [],
+      playedQueue: [],
       nowPlaying: null,
       vetoBySocket: new Set(),
       stats: {},
+      settings: {
+        maxSongsPerUser: 3,
+        approvalMode: false,
+        isLocked: false,
+      },
     };
     rooms.set(code, room);
     if (typeof cb === "function") cb({ roomCode: code, hostToken });
@@ -208,15 +246,18 @@ io.on("connection", (socket) => {
   socket.on("room:hostJoin", (payload, cb) => {
     const roomCode = payload && payload.roomCode;
     const hostToken = payload && payload.hostToken;
+    const userId = payload && payload.userId;
     const room = getRoom(roomCode);
     if (!room || room.hostToken !== hostToken) {
       if (typeof cb === "function") cb({ ok: false, error: "invalid_host" });
       return;
     }
     room.hostSocketId = socket.id;
+    room.hostUserId = userId || room.hostUserId;
     socket.join(room.code);
     socket.data.roomCode = room.code;
     socket.data.role = "host";
+    socket.data.userId = userId || null;
     broadcastState(room);
     if (typeof cb === "function") cb({ ok: true, state: getStatePayload(room) });
   });
@@ -224,6 +265,7 @@ io.on("connection", (socket) => {
   socket.on("room:join", (payload, cb) => {
     const roomCode = payload && payload.roomCode;
     const djNameRaw = payload && payload.djName;
+    const userId = payload && payload.userId;
     const room = getRoom(roomCode);
     const display = String(djNameRaw || "").trim();
     const norm = normalizeName(display);
@@ -231,26 +273,99 @@ io.on("connection", (socket) => {
       if (typeof cb === "function") cb({ ok: false, error: "room_not_found" });
       return;
     }
+    if (room.settings.isLocked) {
+      if (typeof cb === "function") cb({ ok: false, error: "room_locked" });
+      return;
+    }
     if (!norm) {
       if (typeof cb === "function") cb({ ok: false, error: "name_required" });
       return;
     }
+    if (!userId) {
+      if (typeof cb === "function") cb({ ok: false, error: "user_id_required" });
+      return;
+    }
+    const existingByUserId = room.remotes.get(userId);
+    if (existingByUserId && existingByUserId.socketId) {
+      if (typeof cb === "function") cb({ ok: false, error: "already_joined" });
+      return;
+    }
     for (const m of room.remotes.values()) {
+      if (m.userId === userId) continue;
       if (m.norm === norm) {
         if (typeof cb === "function") cb({ ok: false, error: "name_taken" });
         return;
       }
     }
-    room.remotes.set(socket.id, { norm, djName: display });
+    room.remotes.set(userId, {
+      userId,
+      norm,
+      djName: display,
+      socketId: socket.id,
+    });
     socket.join(room.code);
     socket.data.roomCode = room.code;
     socket.data.role = "remote";
+    socket.data.userId = userId;
     socket.data.djNorm = norm;
     socket.data.djName = display;
     ensureStat(room, norm, display);
     broadcastState(room);
     if (typeof cb === "function")
       cb({ ok: true, roomCode: room.code, djName: display, state: getStatePayload(room) });
+  });
+
+  socket.on("room:rejoin", (payload, cb) => {
+    const roomCode = payload && payload.roomCode;
+    const userId = payload && payload.userId;
+    const isHost = !!(payload && payload.isHost);
+    const djNameRaw = payload && payload.username;
+    const room = getRoom(roomCode);
+    if (!room) {
+      if (typeof cb === "function") cb({ ok: false, error: "room_not_found" });
+      return;
+    }
+    if (!userId) {
+      if (typeof cb === "function") cb({ ok: false, error: "user_id_required" });
+      return;
+    }
+    if (isHost) {
+      if (!room.hostUserId || room.hostUserId !== userId) {
+        if (typeof cb === "function") cb({ ok: false, error: "rejoin_denied" });
+        return;
+      }
+      room.hostSocketId = socket.id;
+      socket.join(room.code);
+      socket.data.roomCode = room.code;
+      socket.data.role = "host";
+      socket.data.userId = userId;
+      broadcastState(room);
+      if (typeof cb === "function") cb({ ok: true, state: getStatePayload(room) });
+      return;
+    }
+    const remote = room.remotes.get(userId);
+    if (!remote) {
+      if (typeof cb === "function") cb({ ok: false, error: "rejoin_denied" });
+      return;
+    }
+    const display = String(djNameRaw || remote.djName || "").trim();
+    const norm = normalizeName(display);
+    if (!norm) {
+      if (typeof cb === "function") cb({ ok: false, error: "name_required" });
+      return;
+    }
+    remote.socketId = socket.id;
+    remote.djName = display;
+    remote.norm = norm;
+    socket.join(room.code);
+    socket.data.roomCode = room.code;
+    socket.data.role = "remote";
+    socket.data.userId = userId;
+    socket.data.djNorm = norm;
+    socket.data.djName = display;
+    ensureStat(room, norm, display);
+    broadcastState(room);
+    if (typeof cb === "function") cb({ ok: true, state: getStatePayload(room) });
   });
 
   socket.on("queue:add", (payload, cb) => {
@@ -274,6 +389,16 @@ io.on("connection", (socket) => {
     const member = getMemberForQueue(room, socket);
     const addedBy = member ? member.djName : "DJ";
     const addedByNorm = member ? member.norm : normalizeName(addedBy);
+    if (socket.data.role === "remote") {
+      let userCount = 0;
+      if (room.nowPlaying && room.nowPlaying.addedByNorm === addedByNorm) userCount++;
+      for (const q of room.queue) if (q.addedByNorm === addedByNorm) userCount++;
+      for (const q of room.pendingQueue) if (q.addedByNorm === addedByNorm) userCount++;
+      if (userCount >= room.settings.maxSongsPerUser) {
+        if (typeof cb === "function") cb({ ok: false, error: "max_songs_reached" });
+        return;
+      }
+    }
     ensureStat(room, addedByNorm, addedBy);
     room.stats[addedByNorm].songsQueued += 1;
     const item = {
@@ -286,6 +411,12 @@ io.on("connection", (socket) => {
       upvotedBy: new Set(),
       loop: false,
     };
+    if (room.settings.approvalMode && socket.data.role === "remote") {
+      room.pendingQueue.push(item);
+      broadcastState(room);
+      if (typeof cb === "function") cb({ ok: true, pending: true });
+      return;
+    }
     room.queue.push(item);
     if (!room.nowPlaying) {
       room.nowPlaying = room.queue.shift();
@@ -417,10 +548,114 @@ io.on("connection", (socket) => {
     if (typeof cb === "function") cb({ ok: true });
   });
 
+  socket.on("host:previous", (payload, cb) => {
+    const roomCode = payload && payload.roomCode;
+    const room = getRoom(roomCode);
+    if (
+      !room ||
+      socket.data.role !== "host" ||
+      room.hostSocketId !== socket.id
+    ) {
+      if (typeof cb === "function") cb({ ok: false });
+      return;
+    }
+    const moved = playPrevious(room);
+    if (typeof cb === "function") cb({ ok: moved });
+  });
+
+  socket.on("host:updateSettings", (payload, cb) => {
+    const room = getRoom(socket.data.roomCode);
+    if (!room || socket.data.role !== "host" || room.hostSocketId !== socket.id) {
+      if (typeof cb === "function") cb({ ok: false });
+      return;
+    }
+    if (typeof payload.maxSongsPerUser === "number") {
+      room.settings.maxSongsPerUser = Math.max(1, Math.min(50, Math.floor(payload.maxSongsPerUser)));
+    }
+    if (typeof payload.approvalMode === "boolean") {
+      room.settings.approvalMode = payload.approvalMode;
+    }
+    if (typeof payload.isLocked === "boolean") {
+      room.settings.isLocked = payload.isLocked;
+    }
+    broadcastState(room);
+    if (typeof cb === "function") cb({ ok: true });
+  });
+
+  socket.on("host:approveSong", (payload, cb) => {
+    const room = getRoom(socket.data.roomCode);
+    if (!room || socket.data.role !== "host" || room.hostSocketId !== socket.id) {
+      if (typeof cb === "function") cb({ ok: false });
+      return;
+    }
+    const itemId = payload && payload.itemId;
+    const idx = room.pendingQueue.findIndex((i) => i.id === itemId);
+    if (idx === -1) {
+      if (typeof cb === "function") cb({ ok: false });
+      return;
+    }
+    const [item] = room.pendingQueue.splice(idx, 1);
+    room.queue.push(item);
+    if (!room.nowPlaying) {
+      room.nowPlaying = room.queue.shift();
+      room.nowPlaying.upvotedBy = new Set();
+      clearVetoes(room);
+    }
+    broadcastState(room);
+    if (typeof cb === "function") cb({ ok: true });
+  });
+
+  socket.on("host:rejectSong", (payload, cb) => {
+    const room = getRoom(socket.data.roomCode);
+    if (!room || socket.data.role !== "host" || room.hostSocketId !== socket.id) {
+      if (typeof cb === "function") cb({ ok: false });
+      return;
+    }
+    const itemId = payload && payload.itemId;
+    const idx = room.pendingQueue.findIndex((i) => i.id === itemId);
+    if (idx === -1) {
+      if (typeof cb === "function") cb({ ok: false });
+      return;
+    }
+    room.pendingQueue.splice(idx, 1);
+    broadcastState(room);
+    if (typeof cb === "function") cb({ ok: true });
+  });
+
   socket.on("room:requestSync", () => {
     const room = getRoom(socket.data.roomCode);
     if (!room) return;
     socket.emit("queue:updated", getStatePayload(room));
+  });
+
+  socket.on("room:close", (payload, cb) => {
+    const roomCode = payload && payload.roomCode;
+    const room = getRoom(roomCode || socket.data.roomCode);
+    if (
+      !room ||
+      socket.data.role !== "host" ||
+      room.hostSocketId !== socket.id
+    ) {
+      if (typeof cb === "function") cb({ ok: false });
+      return;
+    }
+    io.to(room.code).emit("room:destroyed");
+    const sids = io.sockets.adapter.rooms.get(room.code);
+    if (sids) {
+      for (const sid of sids) {
+        const target = io.sockets.sockets.get(sid);
+        if (target) {
+          target.leave(room.code);
+          target.data.roomCode = null;
+          target.data.role = null;
+          target.data.userId = null;
+          target.data.djNorm = null;
+          target.data.djName = null;
+        }
+      }
+    }
+    rooms.delete(room.code);
+    if (typeof cb === "function") cb({ ok: true });
   });
 
   socket.on("disconnect", () => {
@@ -429,7 +664,8 @@ io.on("connection", (socket) => {
     const room = getRoom(code);
     if (!room) return;
     if (socket.data.role === "remote") {
-      room.remotes.delete(socket.id);
+      const remote = getRemoteBySocketId(room, socket.id);
+      if (remote) remote.socketId = null;
       room.vetoBySocket.delete(socket.id);
     }
     if (socket.data.role === "host" && room.hostSocketId === socket.id) {

@@ -22,13 +22,22 @@ export interface Member {
   role: "host" | "remote";
 }
 
+export interface RoomSettings {
+  maxSongsPerUser: number;
+  approvalMode: boolean;
+  isLocked: boolean;
+}
+
 export interface RoomState {
   queue: QueueItem[];
+  pendingQueue: QueueItem[];
+  playedQueue: QueueItem[];
   nowPlaying: QueueItem | null;
   vetoCount: number;
   vetoNeeded: number;
   members: Member[];
   leaderboard: LeaderboardEntry[];
+  settings: RoomSettings;
 }
 
 export interface SearchResult {
